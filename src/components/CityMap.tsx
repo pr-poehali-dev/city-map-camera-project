@@ -19,12 +19,14 @@ interface CityMapProps {
   onMapClick?: (lat: number, lng: number) => void;
   isAddingCamera: boolean;
   newCameraPosition?: { lat: number; lng: number };
+  searchResult?: { lat: number; lng: number; address: string } | null;
 }
 
-const CityMap = ({ cameras, onCameraClick, onMapClick, isAddingCamera, newCameraPosition }: CityMapProps) => {
+const CityMap = ({ cameras, onCameraClick, onMapClick, isAddingCamera, newCameraPosition, searchResult }: CityMapProps) => {
   const mapRef = useRef<L.Map | null>(null);
   const markersRef = useRef<Map<string, { marker: L.Marker; circle: L.Circle }>>(new Map());
   const newCameraMarkerRef = useRef<L.Marker | null>(null);
+  const searchMarkerRef = useRef<L.Marker | null>(null);
 
   useEffect(() => {
     if (!mapRef.current) {
@@ -166,6 +168,47 @@ const CityMap = ({ cameras, onCameraClick, onMapClick, isAddingCamera, newCamera
         .addTo(mapRef.current);
     }
   }, [isAddingCamera, newCameraPosition]);
+
+  useEffect(() => {
+    if (!mapRef.current) return;
+
+    if (searchMarkerRef.current) {
+      searchMarkerRef.current.remove();
+      searchMarkerRef.current = null;
+    }
+
+    if (searchResult) {
+      const icon = L.divIcon({
+        html: `
+          <div style="
+            width: 40px;
+            height: 40px;
+            background: #F97316;
+            border: 3px solid white;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 4px 12px rgba(249, 115, 22, 0.4);
+          ">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="white" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"></path>
+              <circle cx="12" cy="10" r="3"></circle>
+            </svg>
+          </div>
+        `,
+        className: '',
+        iconSize: [40, 40],
+        iconAnchor: [20, 40],
+      });
+
+      searchMarkerRef.current = L.marker([searchResult.lat, searchResult.lng], { icon })
+        .addTo(mapRef.current)
+        .bindPopup(`<strong>Проверяемый адрес</strong><br/>${searchResult.address}`);
+      
+      mapRef.current.setView([searchResult.lat, searchResult.lng], 15);
+    }
+  }, [searchResult]);
 
   return (
     <div 

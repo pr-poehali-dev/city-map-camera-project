@@ -33,10 +33,67 @@ const Index = () => {
   const [selectedCamera, setSelectedCamera] = useState<Camera | null>(null);
   const [isAddingCamera, setIsAddingCamera] = useState(false);
   const [newCamera, setNewCamera] = useState({ name: '', lat: 52.2897, lng: 104.2806, radius: 100 });
+  const [addressSearch, setAddressSearch] = useState('');
+  const [searchResult, setSearchResult] = useState<{ lat: number; lng: number; address: string } | null>(null);
+  const [isSearching, setIsSearching] = useState(false);
+  const [coveredCameras, setCoveredCameras] = useState<Camera[]>([]);
 
   const handleMapClick = (lat: number, lng: number) => {
     if (!isAddingCamera) return;
     setNewCamera({ ...newCamera, lat, lng });
+  };
+
+  const calculateDistance = (lat1: number, lng1: number, lat2: number, lng2: number): number => {
+    const R = 6371e3;
+    const φ1 = lat1 * Math.PI / 180;
+    const φ2 = lat2 * Math.PI / 180;
+    const Δφ = (lat2 - lat1) * Math.PI / 180;
+    const Δλ = (lng2 - lng1) * Math.PI / 180;
+
+    const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+      Math.cos(φ1) * Math.cos(φ2) *
+      Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+    return R * c;
+  };
+
+  const searchAddress = async () => {
+    if (!addressSearch.trim()) return;
+    
+    setIsSearching(true);
+    try {
+      const response = await fetch(
+        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(addressSearch + ', Иркутск')}&limit=1`
+      );
+      const data = await response.json();
+      
+      if (data.length > 0) {
+        const result = {
+          lat: parseFloat(data[0].lat),
+          lng: parseFloat(data[0].lon),
+          address: data[0].display_name
+        };
+        setSearchResult(result);
+        
+        const camerasInRange = cameras.filter(camera => {
+          const distance = calculateDistance(result.lat, result.lng, camera.lat, camera.lng);
+          return distance <= camera.radius;
+        });
+        
+        setCoveredCameras(camerasInRange);
+      }
+    } catch (error) {
+      console.error('Ошибка поиска адреса:', error);
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
+  const clearSearch = () => {
+    setSearchResult(null);
+    setCoveredCameras([]);
+    setAddressSearch('');
   };
 
   const addCamera = () => {
@@ -85,6 +142,24 @@ const Index = () => {
             </div>
             
             <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2">
+                <Input
+                  placeholder="Введите адрес для проверки..."
+                  value={addressSearch}
+                  onChange={(e) => setAddressSearch(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && searchAddress()}
+                  className="w-64"
+                />
+                <Button onClick={searchAddress} disabled={isSearching} size="sm">
+                  <Icon name="Search" size={16} className="mr-2" />
+                  Проверить
+                </Button>
+                {searchResult && (
+                  <Button onClick={clearSearch} variant="ghost" size="sm">
+                    <Icon name="X" size={16} />
+                  </Button>
+                )}
+              </div>
               <div className="flex items-center gap-2 px-3 py-2 bg-muted rounded-lg">
                 <Icon name="Activity" size={16} className="text-primary" />
                 <span className="text-sm font-medium">{activeCameras} / {cameras.length} активны</span>
@@ -116,7 +191,51 @@ const Index = () => {
                 onMapClick={handleMapClick}
                 isAddingCamera={isAddingCamera}
                 newCameraPosition={isAddingCamera ? { lat: newCamera.lat, lng: newCamera.lng } : undefined}
+                searchResult={searchResult}
               />
+
+              {searchResult && (
+                <Card className="mt-4 p-4 bg-primary/5 border-primary/20">
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Icon name="MapPin" size={20} className="text-primary" />
+                        <h3 className="font-semibold">Результат проверки</h3>
+                      </div>
+                      <p className="text-sm text-muted-foreground mb-3">{searchResult.address}</p>
+                      
+                      {coveredCameras.length > 0 ? (
+                        <div className="space-y-2">
+                          <div className="flex items-center gap-2 text-sm font-medium text-green-600">
+                            <Icon name="CheckCircle" size={16} />
+                            <span>Адрес попадает в зону видимости {coveredCameras.length} камер(ы)</span>
+                          </div>
+                          <div className="space-y-1">
+                            {coveredCameras.map(cam => (
+                              <div key={cam.id} className="flex items-center gap-2 text-sm pl-6">
+                                <Icon name="Video" size={14} className="text-primary" />
+                                <span>{cam.name}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2 text-sm font-medium text-orange-600">
+                          <Icon name="AlertCircle" size={16} />
+                          <span>Адрес не попадает в зону видимости камер</span>
+                        </div>
+                      )}
+                    </div>
+                    <Button 
+                      variant="ghost" 
+                      size="sm"
+                      onClick={clearSearch}
+                    >
+                      <Icon name="X" size={16} />
+                    </Button>
+                  </div>
+                </Card>
+              )}
 
               {isAddingCamera && (
                 <Card className="mt-4 p-4 bg-muted/50">
@@ -126,11 +245,47 @@ const Index = () => {
                       <Label htmlFor="camera-name">Название камеры</Label>
                       <Input
                         id="camera-name"
-                        placeholder="Например: Камера-4"
+                        placeholder="Например: Камера ул. Ленина"
                         value={newCamera.name}
                         onChange={(e) => setNewCamera({ ...newCamera, name: e.target.value })}
                         className="mt-1"
                       />
+                    </div>
+                    <div>
+                      <Label htmlFor="camera-address">Или введите адрес</Label>
+                      <div className="flex gap-2 mt-1">
+                        <Input
+                          id="camera-address"
+                          placeholder="ул. Ленина, 1"
+                          onKeyDown={async (e) => {
+                            if (e.key === 'Enter') {
+                              const target = e.target as HTMLInputElement;
+                              const address = target.value;
+                              if (!address) return;
+                              
+                              try {
+                                const response = await fetch(
+                                  `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(address + ', Иркутск')}&limit=1`
+                                );
+                                const data = await response.json();
+                                
+                                if (data.length > 0) {
+                                  setNewCamera({
+                                    ...newCamera,
+                                    lat: parseFloat(data[0].lat),
+                                    lng: parseFloat(data[0].lon),
+                                    name: newCamera.name || address
+                                  });
+                                  target.value = '';
+                                }
+                              } catch (error) {
+                                console.error('Ошибка геокодирования:', error);
+                              }
+                            }
+                          }}
+                        />
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-1">Нажмите Enter для поиска</p>
                     </div>
                     <div>
                       <Label>Радиус обзора: {newCamera.radius}м</Label>
