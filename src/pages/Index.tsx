@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -10,11 +10,13 @@ import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 
+import CityMap from '@/components/CityMap';
+
 interface Camera {
   id: string;
   name: string;
-  x: number;
-  y: number;
+  lat: number;
+  lng: number;
   radius: number;
   status: 'active' | 'inactive' | 'warning';
   coverage: number;
@@ -23,23 +25,18 @@ interface Camera {
 
 const Index = () => {
   const [cameras, setCameras] = useState<Camera[]>([
-    { id: '1', name: 'Камера-1', x: 30, y: 40, radius: 150, status: 'active', coverage: 85, lastActivity: '2 мин назад' },
-    { id: '2', name: 'Камера-2', x: 60, y: 30, radius: 120, status: 'active', coverage: 92, lastActivity: '5 мин назад' },
-    { id: '3', name: 'Камера-3', x: 45, y: 70, radius: 100, status: 'warning', coverage: 67, lastActivity: '15 мин назад' },
+    { id: '1', name: 'Камера ул. Карла Маркса', lat: 52.2897, lng: 104.2806, radius: 150, status: 'active', coverage: 85, lastActivity: '2 мин назад' },
+    { id: '2', name: 'Камера площадь Кирова', lat: 52.2856, lng: 104.2896, radius: 120, status: 'active', coverage: 92, lastActivity: '5 мин назад' },
+    { id: '3', name: 'Камера набережная Ангары', lat: 52.2950, lng: 104.2750, radius: 100, status: 'warning', coverage: 67, lastActivity: '15 мин назад' },
   ]);
   
   const [selectedCamera, setSelectedCamera] = useState<Camera | null>(null);
   const [isAddingCamera, setIsAddingCamera] = useState(false);
-  const [newCamera, setNewCamera] = useState({ name: '', x: 50, y: 50, radius: 100 });
+  const [newCamera, setNewCamera] = useState({ name: '', lat: 52.2897, lng: 104.2806, radius: 100 });
 
-  const handleMapClick = (e: React.MouseEvent<HTMLDivElement>) => {
+  const handleMapClick = (lat: number, lng: number) => {
     if (!isAddingCamera) return;
-    
-    const rect = e.currentTarget.getBoundingClientRect();
-    const x = ((e.clientX - rect.left) / rect.width) * 100;
-    const y = ((e.clientY - rect.top) / rect.height) * 100;
-    
-    setNewCamera({ ...newCamera, x, y });
+    setNewCamera({ ...newCamera, lat, lng });
   };
 
   const addCamera = () => {
@@ -48,8 +45,8 @@ const Index = () => {
     const camera: Camera = {
       id: Date.now().toString(),
       name: newCamera.name,
-      x: newCamera.x,
-      y: newCamera.y,
+      lat: newCamera.lat,
+      lng: newCamera.lng,
       radius: newCamera.radius,
       status: 'active',
       coverage: Math.floor(Math.random() * 30) + 70,
@@ -57,7 +54,7 @@ const Index = () => {
     };
     
     setCameras([...cameras, camera]);
-    setNewCamera({ name: '', x: 50, y: 50, radius: 100 });
+    setNewCamera({ name: '', lat: 52.2897, lng: 104.2806, radius: 100 });
     setIsAddingCamera(false);
   };
 
@@ -113,63 +110,13 @@ const Index = () => {
                 </Button>
               </div>
               
-              <div 
-                className="relative bg-muted rounded-lg overflow-hidden aspect-[4/3] cursor-crosshair"
-                onClick={handleMapClick}
-                style={{ 
-                  backgroundImage: 'linear-gradient(rgba(142, 145, 150, 0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(142, 145, 150, 0.1) 1px, transparent 1px)',
-                  backgroundSize: '20px 20px'
-                }}
-              >
-                {cameras.map((camera) => (
-                  <div key={camera.id}>
-                    <div
-                      className="absolute rounded-full border-2 transition-all"
-                      style={{
-                        left: `${camera.x}%`,
-                        top: `${camera.y}%`,
-                        width: `${camera.radius}px`,
-                        height: `${camera.radius}px`,
-                        transform: 'translate(-50%, -50%)',
-                        borderColor: camera.status === 'active' ? 'hsl(var(--primary))' : camera.status === 'warning' ? '#F97316' : '#8E9196',
-                        backgroundColor: camera.status === 'active' ? 'hsl(var(--primary) / 0.1)' : camera.status === 'warning' ? 'rgba(249, 115, 22, 0.1)' : 'rgba(142, 145, 150, 0.1)',
-                      }}
-                    />
-                    
-                    <div
-                      className="absolute cursor-pointer hover:scale-110 transition-transform"
-                      style={{
-                        left: `${camera.x}%`,
-                        top: `${camera.y}%`,
-                        transform: 'translate(-50%, -50%)',
-                      }}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setSelectedCamera(camera);
-                      }}
-                    >
-                      <div className="w-10 h-10 bg-card border-2 border-primary rounded-full flex items-center justify-center shadow-lg">
-                        <Icon name="Video" size={20} className="text-primary" />
-                      </div>
-                    </div>
-                  </div>
-                ))}
-                
-                {isAddingCamera && (
-                  <div
-                    className="absolute pointer-events-none"
-                    style={{
-                      left: `${newCamera.x}%`,
-                      top: `${newCamera.y}%`,
-                      transform: 'translate(-50%, -50%)',
-                    }}
-                  >
-                    <div className="w-10 h-10 bg-primary/20 border-2 border-primary border-dashed rounded-full flex items-center justify-center animate-pulse">
-                      <Icon name="Plus" size={20} className="text-primary" />
-                    </div>
-                  </div>
-                )}
-              </div>
+              <CityMap
+                cameras={cameras}
+                onCameraClick={(camera) => setSelectedCamera(camera)}
+                onMapClick={handleMapClick}
+                isAddingCamera={isAddingCamera}
+                newCameraPosition={isAddingCamera ? { lat: newCamera.lat, lng: newCamera.lng } : undefined}
+              />
 
               {isAddingCamera && (
                 <Card className="mt-4 p-4 bg-muted/50">
